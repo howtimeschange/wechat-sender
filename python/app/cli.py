@@ -9,7 +9,6 @@ import argparse
 import json
 import os
 import platform
-import pwd
 import subprocess
 import sys
 import time
@@ -21,7 +20,10 @@ from typing import Optional
 
 def _real_home() -> Path:
     """返回真实的用户 home 目录，绕过 Python pkg 改写的 $HOME 环境变量。"""
-    return Path(pwd.getpwuid(os.getuid()).pw_dir)
+    if sys.platform == "win32":
+        return Path(os.environ.get("USERPROFILE", os.environ.get("HOMEDRIVE", "C:\\") + "\\Users\\" + os.environ.get("USERNAME", "")))
+    import os
+    return Path(os.path.expanduser("~"))
 
 try:
     import openpyxl
@@ -172,9 +174,24 @@ def should_send(task: Task, now: datetime) -> bool:
     return now >= task.send_time
 
 
+def _ensure_accessibility():
+    """触发 macOS Accessibility 权限对话框（自动弹出系统授权面板）。
+    osascript 访问 System Events 时若未授权，系统自动弹出授权提示。"""
+    if not IS_MAC:
+        return
+    try:
+        subprocess.run([
+            "osascript", "-e",
+            "tell application \"System Events\"\n keystroke \"x\"\n end tell"
+        ], capture_output=True, timeout=3)
+    except Exception:
+        pass
+
+
 def call_sender(target: str, msg_type: str, text: str, image_path: str):
     img = str(Path(image_path).expanduser()) if image_path else ""
     if IS_MAC:
+        _ensure_accessibility()
         cmd = ["osascript", str(APPLE_SCRIPT), target, msg_type, text, img]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:

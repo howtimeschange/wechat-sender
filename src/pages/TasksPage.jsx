@@ -140,10 +140,11 @@ export default function TasksPage() {
     }
   }
 
-  const toggleOne = (id) => {
+  const toggleOne = (id, currentlyChecked) => {
     setSelected(prev => {
       const s = new Set(prev)
-      s.has(id) ? s.delete(id) : s.add(id)
+      if (currentlyChecked) s.delete(id)
+      else s.add(id)
       return s
     })
   }
@@ -389,7 +390,7 @@ export default function TasksPage() {
                         type="checkbox"
                         checked={allSelected}
                         ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                        onChange={toggleAll}
+                        onClick={e => { e.preventDefault(); toggleAll() }}
                       />
                       <span className="checkmark" />
                     </label>
@@ -409,7 +410,7 @@ export default function TasksPage() {
                     key={task.id}
                     task={task}
                     checked={selected.has(task.id)}
-                    onToggle={() => toggleOne(task.id)}
+                    onToggle={(currentlyChecked) => toggleOne(task.id, currentlyChecked)}
                     onEdit={() => { setEditTask(task); setShowNewTask(true) }}
                     onDelete={() => deleteTask(task.id)}
                     sending={sending}
@@ -490,7 +491,7 @@ function TaskRow({ task, checked, onToggle, onEdit, onDelete, sending }) {
           <input
             type="checkbox"
             checked={checked}
-            onChange={onToggle}
+            onClick={e => { e.preventDefault(); onToggle(checked) }}
             disabled={!canCheck}
           />
           <span className="checkmark" />
