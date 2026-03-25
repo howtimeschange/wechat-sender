@@ -18,28 +18,23 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Download and bundle Python 3.12 + openpyxl for macOS
+      - name: Install Python 3.12 via Homebrew + bundle openpyxl for macOS
         run: |
-          PYTHON_PKG="python-3.12.9-macos11.pkg"
-          INSTALL_DIR="$HOME/python-install"
-          FRAMEWORK_SRC="$INSTALL_DIR/Library/Frameworks/Python.framework"
           FRAMEWORK_DST="python/bundle/Python.framework"
 
           if [ ! -f "$FRAMEWORK_DST/Versions/3.12/Python" ]; then
-            echo "Downloading macOS Python 3.12..."
-            curl -sL "https://www.python.org/ftp/python/3.12.9/$PYTHON_PKG" -o "/tmp/$PYTHON_PKG"
-            echo "Installing Python to $INSTALL_DIR..."
-            sudo installer -pkg "/tmp/$PYTHON_PKG" -target "$INSTALL_DIR"
-            rm -f "/tmp/$PYTHON_PKG"
-            echo "Locating Python.framework..."
-            ls "$FRAMEWORK_SRC" 2>/dev/null || echo "NOT FOUND at $FRAMEWORK_SRC"
-            ls "$HOME/Library/Frameworks/Python.framework" 2>/dev/null || echo "NOT FOUND at HOME/Library"
+            echo "Installing Python 3.12 via Homebrew..."
+            brew install python@3.12
+            PYTHON_PREFIX=$(brew --prefix python@3.12)
+            FRAMEWORK_SRC="$PYTHON_PREFIX/Frameworks/Python.framework"
+            echo "Python.framework at: $FRAMEWORK_SRC"
+            ls "$FRAMEWORK_SRC/Versions/" 2>/dev/null || echo "NOT FOUND"
             echo "Copying Python.framework to bundle..."
             mkdir -p "python/bundle"
             cp -R "$FRAMEWORK_SRC" "$FRAMEWORK_DST"
             echo "Python.framework copied"
           else
-            echo "Python already bundled, skipping download"
+            echo "Python already bundled, skipping install"
           fi
 
           echo "Installing openpyxl into bundled Python..."
