@@ -21,22 +21,19 @@ jobs:
       # ── python-build-standalone（temu-assistant 同款方案）──────────────
       - name: Download and bundle Python 3.12 for macOS
         run: |
-          VERSION="20241020"
-          PY_VERSION="3.12.8"
+          VERSION="20260310"
+          PY_VERSION="3.12.13"
           BASE="https://github.com/astral-sh/python-build-standalone/releases/download/${VERSION}"
           PROXY="${GITHUB_PROXY:-}"
 
-          # macOS arm64
           FILE="cpython-${PY_VERSION}+${VERSION}-aarch64-apple-darwin-install_only_stripped.tar.gz"
           DEST="python/bundle"
           mkdir -p "$DEST"
-          if [ ! -f "$DEST/bin/python3" ]; then
-            echo "Downloading macOS arm64 Python..."
-            curl -L -o /tmp/$FILE "${PROXY}${BASE}/${FILE}" --progress-bar
-            echo "Extracting..."
-            tar -xzf /tmp/$FILE -C "$DEST" --strip-components=1
-            rm -f /tmp/$FILE
-          fi
+          echo "Downloading macOS arm64 Python ${PY_VERSION}..."
+          curl -L -o /tmp/$FILE "${PROXY}${BASE}/${FILE}" --progress-bar
+          echo "Extracting..."
+          tar -xzf /tmp/$FILE -C "$DEST" --strip-components=1
+          rm -f /tmp/$FILE
           echo "Python bin:"
           ls "$DEST/bin/"
           echo "Installing openpyxl..."
@@ -70,19 +67,17 @@ jobs:
 
       - name: Download and bundle Python 3.12 for Windows
         run: |
-          $version = "20241020"
-          $pyVersion = "3.12.8"
+          $version = "20260310"
+          $pyVersion = "3.12.13"
           $base = "https://github.com/astral-sh/python-build-standalone/releases/download/$version"
           $file = "cpython-$pyVersion+$version-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
           $dest = "python\bundle"
-          if (!(Test-Path "$dest\python.exe")) {
-            Write-Host "Downloading Windows Python..."
-            curl -L -o /tmp/$file "$base/$file" --progress-bar
-            Write-Host "Extracting..."
-            New-Item -ItemType Directory -Force -Path $dest | Out-Null
-            tar -xzf /tmp/$file -C $dest --strip-components=1
-            Remove-Item /tmp/$file
-          }
+          Write-Host "Downloading Windows Python ${pyVersion}..."
+          curl -L -o /tmp/$file "$base/$file" --progress-bar
+          Write-Host "Extracting..."
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          tar -xzf /tmp/$file -C $dest --strip-components=1
+          Remove-Item /tmp/$file
           Write-Host "Python:"
           Get-ChildItem "$dest" -Name
           Write-Host "Installing openpyxl..."
