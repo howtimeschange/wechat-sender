@@ -59,36 +59,21 @@ except ImportError:
         sys.exit(1)
 
 
-# ─── 剪贴板工具（ctypes 直调 Windows API，比 pyperclip 快 10 倍）────────
-import ctypes
-
-CF_UNICODETEXT = 13
-GMEM_MOVEABLE = 0x0002
-
+# ─── 剪贴板工具（pyperclip，稳定可靠）────────
 def _clipboard_copy(text: str):
-    """用 ctypes 直调 Windows Clipboard API 写入文本（极快，无 subprocess 开销）"""
+    """写入文本到剪贴板（pyperclip，兼容性好不干扰 WeChat）"""
     if not text:
         return
-    text_w = (text + '\0').encode('utf-16-le')
     try:
-        ctypes.windll.user32.OpenClipboard(None)
-        ctypes.windll.user32.EmptyClipboard()
-        h_data = ctypes.windll.kernel32.GlobalAlloc(GMEM_MOVEABLE, len(text_w))
-        p_data = ctypes.windll.kernel32.GlobalLock(h_data)
-        ctypes.memmove(p_data, text_w, len(text_w))
-        ctypes.windll.kernel32.GlobalUnlock(h_data)
-        ctypes.windll.user32.SetClipboardData(CF_UNICODETEXT, h_data)
-        ctypes.windll.user32.CloseClipboard()
+        pyperclip.copy(text)
     except Exception as e:
-        print(f"[WARN] ctypes 剪贴板失败: {e}", file=sys.stderr)
+        print(f"[WARN] 剪贴板写入失败: {e}", file=sys.stderr)
 
 
 def _clipboard_clear():
-    """用 ctypes 清空剪贴板"""
+    """用 pyperclip 写入空字符串清空剪贴板"""
     try:
-        ctypes.windll.user32.OpenClipboard(None)
-        ctypes.windll.user32.EmptyClipboard()
-        ctypes.windll.user32.CloseClipboard()
+        pyperclip.copy("")
     except Exception:
         pass
 
