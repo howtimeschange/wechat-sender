@@ -18,6 +18,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install Python deps (openpyxl)
+        run: pip install openpyxl
+
       - name: Install Node deps
         run: npm ci
 
@@ -41,6 +44,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Download Python standalone
+        run: |
+          $pythonZip = "python-3.12.9-embed-amd64.zip"
+          $pythonDir = "python-3.12.9-embed-amd64"
+          if (!(Test-Path $pythonDir)) {
+            curl -sL "https://www.python.org/ftp/python/3.12.9/$pythonZip" -o $pythonZip
+            Expand-Archive -Force $pythonZip .
+            Remove-Item $pythonZip
+          }
+
+      - name: Install pip and openpyxl
+        run: |
+          $pythonDir = "python-3.12.9-embed-amd64"
+          # bootstrap pip
+          $pipInstaller = "get-pip.py"
+          curl -sL "https://bootstrap.pypa.io/get-pip.py" -o $pipInstaller
+          & "$pythonDir\python.exe" $pipInstaller
+          Remove-Item $pipInstaller
+          # install openpyxl + dependencies
+          & "$pythonDir\Scripts\pip.exe" install openpyxl
+
+      - name: Bundle Python into build
+        run: |
+          $pythonDir = "python-3.12.9-embed-amd64"
+          # Copy bundled Python into build/python/ so electron-builder picks it up
+          mkdir -Force "python\bundle"
+          Copy-Item "$pythonDir\*" "python\bundle\" -Recurse
 
       - name: Install Node deps
         run: npm ci

@@ -39,11 +39,13 @@
       "dist/**/*",
       "electron/**/*",
       "python/**/*",
+      "!python/bundle",
+      "!python/bundle/**/*",
       "!node_modules"
     ],
     "extraResources": [
       {
-        "from": "python",
+        "from": "python/bundle",
         "to": "python",
         "filter": [
           "**/*"
