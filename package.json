@@ -30,6 +30,7 @@
     "react-dom": "^18.3.1"
   },
   "build": {
+    "afterPack": "./scripts/afterPack.js",
     "appId": "com.wechat-sender.app",
     "productName": "WechatSender",
     "directories": {

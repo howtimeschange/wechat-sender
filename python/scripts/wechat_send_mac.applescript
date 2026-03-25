@@ -8,6 +8,7 @@ on run argv
 	set msgText to item 3 of argv
 	set imagePath to item 4 of argv
 
+	-- 激活微信
 	try
 		tell application "WeChat" to activate
 	on error
@@ -15,8 +16,9 @@ on run argv
 	end try
 	delay 0.8
 
+	-- 查找微信进程名称
+	set pName to ""
 	tell application "System Events"
-		set pName to ""
 		if exists process "WeChat" then
 			set pName to "WeChat"
 		else if exists process "微信 3" then
@@ -24,34 +26,32 @@ on run argv
 		else
 			error "未找到微信进程（请确认微信已启动）"
 		end if
+	end tell
 
+	-- 发送标志：任何一步失败都设为 false
+	set sendSucceeded to true
+
+	-- 打开搜索框并搜索联系人
+	tell application "System Events"
 		tell process pName
 			set frontmost to true
 			delay 0.3
 
-			-- 打开搜索框
 			keystroke "f" using {command down}
 			delay 0.25
 
-			-- 粘贴目标名称
 			set the clipboard to targetName
 			keystroke "v" using {command down}
 			delay 0.25
 
-			-- 回车进入目标会话
-			key code 36
+			key code 36 -- 回车进入会话
 			delay 0.7
 
-			-- ============================================================
-			-- 【FIX】若当前窗口已经是目标会话（发送后聊天框出现重复消息）
-			-- 先按 Escape 关闭可能的搜索残留浮层
-			-- ============================================================
+			-- 关闭可能的搜索残留浮层
 			key code 53
 			delay 0.15
 
-			-- ============================================================
 			-- 文字发送
-			-- ============================================================
 			if msgType is "文字" or msgType is "文字+图片" then
 				if msgText is not "" then
 					set the clipboard to msgText
@@ -60,13 +60,12 @@ on run argv
 					delay 0.15
 					key code 36
 					delay 0.35
+				else
+					set sendSucceeded to false
 				end if
 			end if
 
-			-- ============================================================
-			-- 【FIX】图片发送 — 剪贴板 alias 粘贴方案
-			-- 绕过 Cmd+O 文件对话框在不同微信版本的行为不一致问题
-			-- ============================================================
+			-- 图片发送
 			if msgType is "图片" or msgType is "文字+图片" then
 				if imagePath is not "" then
 					try
@@ -77,13 +76,20 @@ on run argv
 						delay 0.25
 						key code 36
 						delay 0.4
-					on error
-						error "图片路径无效或文件不存在: " & imagePath
+					on error errMsg
+						set sendSucceeded to false
+						error "图片发送失败: " & errMsg
 					end try
 				else
+					set sendSucceeded to false
 					error "消息类型包含图片，但图片路径为空"
 				end if
 			end if
 		end tell
 	end tell
+
+	-- 最终检查：若有任何步骤标记失败，则以错误退出
+	if sendSucceeded is false then
+		error "微信发送未完成（内容为空或发送被中断）"
+	end if
 end run

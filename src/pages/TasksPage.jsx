@@ -491,7 +491,7 @@ function TaskRow({ task, checked, onToggle, onEdit, onDelete, sending }) {
           <input
             type="checkbox"
             checked={checked}
-            onClick={e => { e.stopPropagation(); onToggle(!checked) }}
+            onChange={e => { e.stopPropagation(); onToggle(e.target.checked) }}
             disabled={!canCheck}
           />
           <span className="checkmark" />

@@ -192,9 +192,16 @@ def call_sender(target: str, msg_type: str, text: str, image_path: str):
     if IS_MAC:
         _ensure_accessibility()
         cmd = ["osascript", str(APPLE_SCRIPT), target, msg_type, text, img]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if r.returncode != 0:
-            raise RuntimeError(r.stderr.strip() or "AppleScript 执行失败")
+            err = r.stderr.strip() or "AppleScript 执行失败"
+            print(f"[SEND_ERROR] {err}", file=sys.stderr)
+            sys.exit(1)
+        # 检查 stdout 中是否有 AppleScript error 关键字（script 内部 try 吞掉的错误）
+        stdout_lower = r.stdout.lower()
+        if "error" in stdout_lower and ("not found" in stdout_lower or "can’t" in stdout_lower or "permission" in stdout_lower):
+            print(f"[SEND_ERROR] AppleScript 内部错误: {r.stdout.strip()}", file=sys.stderr)
+            sys.exit(1)
     elif IS_WINDOWS:
         import importlib.util
         _win_script = _SCRIPTS_DIR / "wechat_send_win.py"
@@ -415,6 +422,8 @@ def cmd_send(args):
             if i < len(pending) - 1 and not dry_run:
                 time.sleep(send_interval)
         print(f"\n完成！成功 {success_count} 条，失败 {fail_count} 条")
+        if fail_count > 0 or success_count == 0:
+            sys.exit(1)
         return
 
     # ── 原有的 Excel 模式 ───────────────────────────────────
@@ -478,6 +487,8 @@ def cmd_send(args):
             time.sleep(send_interval)
 
     print(f"\n完成！成功 {success_count} 条，失败 {fail_count} 条")
+    if fail_count > 0 or (success_count == 0 and pending):
+        sys.exit(1)
 
 
 def _load_gui_tasks() -> list[dict]:

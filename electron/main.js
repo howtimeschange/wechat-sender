@@ -13,7 +13,6 @@ function getPythonPath() {
   // extraResources: python/bundle/ -> Resources/python/bundle/
   const base = path.join(process.resourcesPath, 'python')
   if (process.platform === 'win32') {
-    // python-build-standalone Windows: python/bundle/python.exe
     const winPython = path.join(base, 'bundle', 'python.exe')
     if (fs.existsSync(winPython)) return winPython
     const fallback = path.join(base, 'python.exe')
@@ -23,6 +22,38 @@ function getPythonPath() {
   const macPython = path.join(base, 'bundle', 'bin', 'python3')
   if (fs.existsSync(macPython)) return macPython
   return 'python3'
+}
+
+// 启动时确保 openpyxl 已安装（兜底 afterPack 脚本未运行的场景）
+function ensurePythonDeps() {
+  if (!app.isPackaged) return
+  const { execSync } = require('child_process')
+  const bundledPython = getPythonPath()
+  try {
+    execSync(`${bundledPython} -c "import openpyxl"`, { timeout: 5000 })
+    return // already available
+  } catch (_) {}
+
+  // 尝试安装到 bundle lib 目录
+  const libDir = path.join(process.resourcesPath, 'python', 'lib', 'python3.14', 'site-packages')
+  try {
+    require('child_process').execSync(
+      `${bundledPython} -m pip install --target="${libDir}" openpyxl PyYAML 2>&1`,
+      { timeout: 60 * 1000 }
+    )
+    console.log('[openpyxl] installed to bundle lib:', libDir)
+  } catch (e) {
+    console.warn('[openpyxl] install failed, trying user site-packages:', e.message)
+    // 最后 fallback：用系统 pip 强制安装
+    try {
+      require('child_process').execSync(
+        `python3 -m pip install --user openpyxl PyYAML 2>&1`,
+        { timeout: 60 * 1000 }
+      )
+    } catch (e2) {
+      console.error('[openpyxl] user install also failed:', e2.message)
+    }
+  }
 }
 
 function getScriptPath(name) {
@@ -223,11 +254,11 @@ ipcMain.handle('send-selected', async (event, taskData) => {
     win.webContents.send('send-done', { code: 0 })
   } catch(e) {
     console.error('[send-selected] exception:', e.message)
-    const stderr = e.stderr ? e.stderr.toString() : ''
-    const stdout = e.stdout ? e.stdout.toString() : ''
-    if (stdout) win.webContents.send('send-progress', stdout)
-    if (stderr) win.webContents.send('send-progress', '[ERROR] ' + stderr)
-    win.webContents.send('send-done', { code: e.status || 1, error: e.message })
+    // execFileSync throws with message like "Command failed: python3 ... exited with 1"
+    // Capture as much context as available
+    const msg = e.message || String(e)
+    win.webContents.send('send-progress', '[ERROR] ' + msg)
+    win.webContents.send('send-done', { code: 1, error: msg })
   }
   return { ok: true }
 })
@@ -327,6 +358,7 @@ ipcMain.handle('get-platform', () => process.platform)
 
 // ─── App lifecycle ────────────────────────────────────────────────────
 app.whenReady().then(function() {
+  ensurePythonDeps()
   createWindow()
   // 首次启动检测 Automation 权限（macOS）
   checkAutomationPermission()
