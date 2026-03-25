@@ -47,26 +47,22 @@ jobs:
 
       - name: Download, install Python + openpyxl, bundle into build
         run: |
-          $pythonDir = "python-3.12.9-embed-amd64"
-          $pythonZip = "$pythonDir.zip"
+          $pythonInstaller = "python-3.12.9-amd64.exe"
+          $installDir = "$env:TEMP\python-bundle"
           $bundleDir = "python\bundle"
-          if (!(Test-Path $pythonDir)) {
-            Write-Host "Downloading Python standalone..."
-            curl -sL "https://www.python.org/ftp/python/3.12.9/$pythonZip" -o $pythonZip
-            Expand-Archive -Force $pythonZip .
-            Remove-Item $pythonZip
+          if (!(Test-Path "$installDir\python.exe")) {
+            Write-Host "Downloading Python full installer..."
+            curl -sL "https://www.python.org/ftp/python/3.12.9/$pythonInstaller" -o $pythonInstaller
+            Write-Host "Installing Python silently to $installDir..."
+            Start-Process -FilePath ".\$pythonInstaller" -ArgumentList "/quiet","InstallAllUsers=0","PrependPath=1","TargetDir=$installDir" -Wait
+            Remove-Item $pythonInstaller
           }
-          Write-Host "Installing pip..."
-          $pipInstaller = "get-pip.py"
-          curl -sL "https://bootstrap.pypa.io/get-pip.py" -o $pipInstaller
-          & "$pythonDir\python.exe" $pipInstaller
-          Remove-Item $pipInstaller
           Write-Host "Installing openpyxl..."
-          & "$pythonDir\Scripts\pip.exe" install openpyxl
+          & "$installDir\python.exe" -m pip install openpyxl
           Write-Host "Bundling into python/bundle..."
           mkdir -Force $bundleDir
-          Copy-Item "$pythonDir\*" "$bundleDir\" -Recurse -Force
-          Write-Host "Done. Bundle contents:"
+          Copy-Item "$installDir\*" "$bundleDir\" -Recurse -Force
+          Write-Host "Done. Bundle:"
           Get-ChildItem $bundleDir | Select-Object Name
 
       - name: Install Node deps
