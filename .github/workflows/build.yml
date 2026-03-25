@@ -21,32 +21,44 @@ jobs:
       - name: Download and bundle Python 3.12 for macOS
         run: |
           BUNDLE_DIR="python/bundle"
-          # python.org macOS 通用二进制（.tgz，解压即用，无需安装）
-          PYTHON_TGZ="python-3.12.9-macos11.pkg.tar.gz"
-          PYTHON_DIR="Python.framework"
+          FRAMEWORK_DIR="$BUNDLE_DIR/Python.framework"
+          # python.org 提供 .pkg（XAR 格式），包含 Framework
+          PKG_URL="https://www.python.org/ftp/python/3.12.9/python-3.12.9-macos11.pkg"
 
-          if [ ! -f "$BUNDLE_DIR/$PYTHON_DIR/Versions/3.12/bin/python3.12" ]; then
-            echo "Downloading Python 3.12 macOS binary..."
-            curl -sL "https://www.python.org/ftp/python/3.12.9/$PYTHON_TGZ" -o "/tmp/$PYTHON_TGZ"
-            echo "Extracting to bundle..."
-            mkdir -p "$BUNDLE_DIR"
-            tar -xzf "/tmp/$PYTHON_TGZ" -C "$BUNDLE_DIR"
-            rm -f "/tmp/$PYTHON_TGZ"
-            # 解压后目录名通常是 "Python.framework" 或 "python-3.12.9"
-            EXTRACTED=$(ls "$BUNDLE_DIR/" | grep -i python | head -1)
-            if [ "$EXTRACTED" != "$PYTHON_DIR" ]; then
-              mv "$BUNDLE_DIR/$EXTRACTED" "$BUNDLE_DIR/$PYTHON_DIR"
+          if [ ! -f "$FRAMEWORK_DIR/Versions/3.12/bin/python3.12" ]; then
+            echo "Downloading Python 3.12 .pkg..."
+            curl -sL "$PKG_URL" -o /tmp/python-3.12.pkg
+            echo "Extracting XAR package..."
+            mkdir -p /tmp/python-extract
+            xar -xf /tmp/python-3.12.pkg -C /tmp/python-extract
+            # .pkg 内 Payload 是 cpio+gzip 压缩的 Python.framework
+            mkdir -p "$FRAMEWORK_DIR"
+            cat /tmp/python-extract/*.pkg/Payload 2>/dev/null | gzip -dc | cpio -idm -p "$FRAMEWORK_DIR" 2>&1 | tail -3
+            # 如果上面的方式失败，尝试直接复制
+            if [ ! -f "$FRAMEWORK_DIR/Versions/3.12/bin/python3.12" ]; then
+              FRAMEWORK_SRC=$(find /tmp/python-extract -name "Python.framework" -type d 2>/dev/null | head -1)
+              if [ -n "$FRAMEWORK_SRC" ]; then
+                cp -R "$FRAMEWORK_SRC" "$FRAMEWORK_DIR"
+              fi
             fi
-            echo "Bundle Python:"
-            ls "$BUNDLE_DIR/$PYTHON_DIR/Versions/3.12/bin/" | grep python
+            echo "Bundle framework:"
+            ls "$FRAMEWORK_DIR/Versions/3.12/bin/" 2>/dev/null | grep python || echo "NOT FOUND"
+            rm -rf /tmp/python-extract /tmp/python-3.12.pkg
           else
             echo "Python already bundled, skipping."
           fi
 
-          echo "Installing openpyxl..."
-          "$BUNDLE_DIR/$PYTHON_DIR/Versions/3.12/bin/python3.12" -m pip install openpyxl --quiet
-          echo "Done. Python version:"
-          "$BUNDLE_DIR/$PYTHON_DIR/Versions/3.12/bin/python3.12" --version
+          if [ -f "$FRAMEWORK_DIR/Versions/3.12/bin/python3.12" ]; then
+            echo "Installing openpyxl..."
+            "$FRAMEWORK_DIR/Versions/3.12/bin/python3.12" -m pip install openpyxl --quiet
+            echo "Done. Python version:"
+            "$FRAMEWORK_DIR/Versions/3.12/bin/python3.12" --version
+          else
+            echo "ERROR: python3.12 not found in bundle"
+            ls "$FRAMEWORK_DIR/" 2>/dev/null || echo "Framework dir empty"
+            find "$BUNDLE_DIR" -name "python*" -type f 2>/dev/null | head -5
+            exit 1
+          fi
 
       - name: Install Node deps
         run: npm ci
