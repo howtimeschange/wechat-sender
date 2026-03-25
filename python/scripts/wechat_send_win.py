@@ -191,28 +191,25 @@ def activate_wechat():
 
 
 def search_contact(name: str, max_retries: int = 2):
-    """搜索联系人（带重试，确保剪贴板不混入残留内容）
+    """搜索联系人（带重试）
 
-    流程：激活窗口 → Ctrl+F → 清空剪贴板 → 写搜索词 → Ctrl+V → Enter
-    不使用 ListItemControl 点击验证，避免触发 WeChat 内部 UI 控件导致闪退"""
+    关键：Ctrl+V 后必须立即按 Enter，不能有延迟。
+    WeChat 搜索框有 ~300ms 防抖逻辑 — 输入完成300ms内未确认会触发
+    "互联网搜索"跳转到网页，导致发送失败。
+    流程：激活窗口 → Ctrl+F → 清剪贴板 → 写搜索词 → 立即Enter"""
     for attempt in range(max_retries):
-        # 确保主窗口在前台
         activate_wechat()
         time.sleep(0.5)
-
-        # 打开搜索框
         auto.SendKeys("{Ctrl}f")
-        time.sleep(0.4)
-
-        # 清空剪贴板后再写本次搜索词（防止残留内容混入）
+        time.sleep(0.3)
+        # 清空剪贴板后立即写入搜索词（防止残留内容混入）
         _clipboard_clear()
         _clipboard_copy(name)
-        time.sleep(0.2)
+        time.sleep(0.1)   # 等待剪贴板写入稳定
         auto.SendKeys("{Ctrl}v")
-        time.sleep(0.4)
-        auto.SendKeys("{Enter}")
+        auto.SendKeys("{Enter}")   # 立即按 Enter，不能有任何延迟
         time.sleep(0.8)
-        return  # 成功返回
+        return
 
     raise RuntimeError(f"未找到联系人 [{name}]，请手动确认微信窗口状态")
 
