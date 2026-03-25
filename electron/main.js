@@ -42,6 +42,37 @@ function loadMainWindow(win) {
   }
 }
 
+// ─── macOS Automation 权限检测 + 引导授权 ───────────────────────────
+function checkAutomationPermission() {
+  if (process.platform !== 'darwin') return
+
+  const { dialog } = require('electron')
+  const result = require('child_process').spawnSync(
+    'osascript',
+    ['-e', 'tell application "System Events"\n keystroke "test"\n end tell'],
+    { timeout: 5000 }
+  )
+
+  if (result.status === 0) return // 已授权
+
+  const USER_LEVEL = 0
+  dialog.showMessageBox({
+    type: 'warning',
+    title: '需要辅助功能权限',
+    message: '微信发送助手需要「辅助功能」权限才能自动发送微信消息。',
+    detail: '点击「打开系统设置」后，在「辅助功能」列表中找到「微信发送助手」并勾选启用。',
+    buttons: ['打开系统设置', '稍后'],
+    defaultId: 0,
+    cancelId: 1,
+  }).then(({ response }) => {
+    if (response === 0) {
+      require('electron').shell.openExternal(
+        'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation'
+      )
+    }
+  })
+}
+
 // ─── 主进程 ───────────────────────────────────────────────────────────
 let daemonProcess = null
 
@@ -285,6 +316,8 @@ ipcMain.handle('get-platform', () => process.platform)
 // ─── App lifecycle ────────────────────────────────────────────────────
 app.whenReady().then(function() {
   createWindow()
+  // 首次启动检测 Automation 权限（macOS）
+  checkAutomationPermission()
   app.on('activate', function() {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

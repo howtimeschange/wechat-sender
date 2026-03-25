@@ -83,7 +83,7 @@ export default function TasksPage() {
         return
       }
       const newTasks = result.map(r => ({ ...r, id: uid(), status: 'waiting' }))
-      const allTasks = [...prev, ...newTasks]
+      const allTasks = [...tasks, ...newTasks]
       window.api.saveGuiTasks(allTasks)
       setTasks(allTasks)
       setSelected(new Set())
