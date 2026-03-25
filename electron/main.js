@@ -9,12 +9,13 @@ function getPythonPath() {
   if (!app.isPackaged) {
     return process.platform === 'win32' ? 'python' : 'python3'
   }
-  // extraResources: python/ 映射到 Resources/python/
+  // extraResources: python/ -> Resources/python/
   const base = path.join(process.resourcesPath, 'python')
   if (process.platform === 'win32') {
     return path.join(base, 'python.exe')
   }
-  return path.join(base, 'bin', 'python3')
+  // macOS: Python.framework 结构
+  return path.join(base, 'Python.framework', 'Versions', '3.12', 'bin', 'python3')
 }
 
 function getScriptPath(name) {
