@@ -11,7 +11,7 @@ on run argv
 	try
 		tell application "WeChat" to activate
 	on error
-		tell application "微信" to activate
+		tell application id "com.tencent.xinWeChat" to activate
 	end try
 	delay 0.8
 
@@ -19,10 +19,10 @@ on run argv
 		set pName to ""
 		if exists process "WeChat" then
 			set pName to "WeChat"
-		else if exists process "微信" then
-			set pName to "微信"
+		else if exists process "微信 3" then
+			set pName to "微信 3"
 		else
-			error "未找到微信进程（WeChat/微信）"
+			error "未找到微信进程（请确认微信已启动）"
 		end if
 
 		tell process pName
