@@ -77,8 +77,12 @@ export default function TasksPage() {
       return
     }
     try {
-      const rows = await parseExcel(file)
-      const newTasks = rows.map(r => ({ ...r, id: uid(), status: 'waiting' }))
+      const result = await parseExcel(file)
+      if (!Array.isArray(result)) {
+        alert('解析失败：' + (result.error || '未知错误'))
+        return
+      }
+      const newTasks = result.map(r => ({ ...r, id: uid(), status: 'waiting' }))
       setTasks(prev => [...prev, ...newTasks])
       setSelected(new Set())
     } catch (e) {

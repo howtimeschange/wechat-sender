@@ -78,16 +78,22 @@ ipcMain.handle('parse-excel', async (_, bytes) => {
   const tmp = path.join(os.tmpdir(), 'wst_upload_' + Date.now() + '.xlsx')
   try {
     fs.writeFileSync(tmp, Buffer.from(bytes))
-    const r = spawnSync(getPythonPath(), [getScriptPath('app/parse_excel.py'), tmp], {
+    const pythonBin = getPythonPath()
+    const scriptPath = getScriptPath('app/parse_excel.py')
+    console.log('[parse-excel] python:', pythonBin, 'script:', scriptPath, 'tmp:', tmp)
+    const r = spawnSync(pythonBin, [scriptPath, tmp], {
       encoding: 'utf8', timeout: 15000,
       env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' }),
     })
     fs.unlinkSync(tmp)
-    if (r.status !== 0) { console.error(r.stderr); return [] }
+    if (r.status !== 0) {
+      console.error('[parse-excel] python error:', r.stderr)
+      return { error: r.stderr }
+    }
     return JSON.parse(r.stdout)
   } catch (e) {
-    console.error(e)
-    return []
+    console.error('[parse-excel] exception:', e)
+    return { error: e.message }
   }
 })
 
