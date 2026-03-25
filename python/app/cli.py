@@ -211,19 +211,21 @@ def call_sender(target: str, msg_type: str, text: str, image_path: str):
             print(f"[SEND_ERROR] AppleScript 内部错误: {r.stdout.strip()}", file=sys.stderr)
             sys.exit(1)
     elif IS_WINDOWS:
-        import importlib.util
+        # 用 subprocess 调用（替代 importlib，避免 __import__  machinery 在打包环境报错）
         _win_script = _SCRIPTS_DIR / "wechat_send_win.py"
-        _spec = importlib.util.spec_from_file_location("wechat_send_win", str(_win_script))
-        _mod = importlib.util.module_from_spec(_spec)
-        try:
-            _spec.loader.exec_module(_mod)
-        except Exception as e:
-            print(f"[call_sender] 模块加载失败: {e}", file=sys.stderr)
-            sys.exit(1)
-        try:
-            _mod.call_send(target, msg_type, text, img)
-        except Exception as e:
-            print(f"[call_sender] 发送失败: {e}", file=sys.stderr)
+        cmd = [
+            sys.executable,
+            str(_win_script),
+            "--call-single",
+            "--target", target,
+            "--msg-type", msg_type,
+            "--text", text or "",
+            "--image-path", img,
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            err = (r.stderr.strip() or r.stdout.strip() or "发送失败")
+            print(f"[call_sender] {err}", file=sys.stderr)
             sys.exit(1)
     else:
         raise RuntimeError("当前系统不支持微信自动化（仅支持 macOS 和 Windows）")

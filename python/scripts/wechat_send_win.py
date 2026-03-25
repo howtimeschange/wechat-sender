@@ -305,7 +305,25 @@ def batch_send(dry_run: bool = False, send_interval: float = 5,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="微信批量发送 — Windows 版")
     parser.add_argument("--dry", action="store_true", help="模拟运行")
+    parser.add_argument("--call-single", action="store_true", help="单次发送（由 cli.py call_sender 调用）")
+    parser.add_argument("--target", type=str, help="发送目标")
+    parser.add_argument("--msg-type", type=str, help="消息类型")
+    parser.add_argument("--text", type=str, help="文字内容")
+    parser.add_argument("--image-path", type=str, default="", help="图片路径")
     args = parser.parse_args()
+
+    if args.call_single:
+        # 单次发送模式（替代 importlib 直接调用 call_send）
+        if not args.target or not args.msg_type:
+            print("[ERROR] --call-single 需要 --target 和 --msg-type", file=sys.stderr)
+            sys.exit(1)
+        try:
+            call_send(args.target, args.msg_type, args.text or "", args.image_path or "")
+            print("✅ 发送成功")
+            sys.exit(0)
+        except Exception as e:
+            print(f"[ERROR] {e}", file=sys.stderr)
+            sys.exit(1)
 
     cfg = load_cfg()
     xlsx_path = cfg.get("excel_path", "")
