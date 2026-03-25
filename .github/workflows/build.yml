@@ -81,8 +81,8 @@ jobs:
           Remove-Item $tmp
           Write-Host "Python:"
           Get-ChildItem "$dest" -Name
-          Write-Host "Installing openpyxl..."
-          & "$dest\python.exe" -m pip install openpyxl --quiet
+          Write-Host "Installing dependencies..."
+          & "$dest\python.exe" -m pip install openpyxl uiautomation pyperclip pywin32 Pillow --quiet --no-warn-script-location
           Write-Host "Done. Python version:"
           & "$dest\python.exe" --version
 

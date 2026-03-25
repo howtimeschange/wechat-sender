@@ -215,8 +215,16 @@ def call_sender(target: str, msg_type: str, text: str, image_path: str):
         _win_script = _SCRIPTS_DIR / "wechat_send_win.py"
         _spec = importlib.util.spec_from_file_location("wechat_send_win", str(_win_script))
         _mod = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_mod)
-        _mod.call_send(target, msg_type, text, img)
+        try:
+            _spec.loader.exec_module(_mod)
+        except Exception as e:
+            print(f"[call_sender] 模块加载失败: {e}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            _mod.call_send(target, msg_type, text, img)
+        except Exception as e:
+            print(f"[call_sender] 发送失败: {e}", file=sys.stderr)
+            sys.exit(1)
     else:
         raise RuntimeError("当前系统不支持微信自动化（仅支持 macOS 和 Windows）")
 

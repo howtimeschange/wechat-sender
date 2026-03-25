@@ -33,14 +33,30 @@ try:
     import win32con
     from PIL import Image
 except ImportError:
-    print("[信息] 正在安装 Windows 自动化依赖...")
-    subprocess.run([sys.executable, "-m", "pip", "install",
-                   "uiautomation", "pyperclip", "pywin32", "Pillow", "-q"])
-    import uiautomation as auto
-    import pyperclip
-    import win32clipboard
-    import win32con
-    from PIL import Image
+    print("[信息] 正在安装 Windows 自动化依赖 (使用 Python: " + sys.executable + ")...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install",
+         "uiautomation", "pyperclip", "pywin32", "Pillow",
+         "--no-warn-script-location", "-q"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print("[ERROR] pip install 失败: " + (result.stderr or result.stdout or "未知错误"), file=sys.stderr)
+        print("[DEBUG] stdout: " + (result.stdout or ""), file=sys.stderr)
+        print("[DEBUG] stderr: " + (result.stderr or ""), file=sys.stderr)
+        sys.exit(1)
+    try:
+        import uiautomation as auto
+        import pyperclip
+        import win32clipboard
+        import win32con
+        from PIL import Image
+    except ImportError as e:
+        print("[ERROR] 依赖安装后仍然无法导入: " + str(e), file=sys.stderr)
+        print("[DEBUG] sys.executable: " + sys.executable, file=sys.stderr)
+        import site
+        print("[DEBUG] site packages: " + str(site.getsitepackages()), file=sys.stderr)
+        sys.exit(1)
 
 # ─── 配置（从外部 config.yaml 读取） ──────────────────────
 
