@@ -9,20 +9,20 @@ function getPythonPath() {
   if (!app.isPackaged) {
     return process.platform === 'win32' ? 'python' : 'python3'
   }
-  const res = process.resourcesPath
-  const p = process.platform === 'win32'
-    ? path.join(res, 'python', 'python.exe')
-    : path.join(res, 'python', 'bin', 'python3')
-  return fs.existsSync(p) ? p : (process.platform === 'win32' ? 'python' : 'python3')
+  // extraResources: python/ 映射到 Resources/python/
+  const base = path.join(process.resourcesPath, 'python')
+  if (process.platform === 'win32') {
+    return path.join(base, 'python.exe')
+  }
+  return path.join(base, 'bin', 'python3')
 }
 
 function getScriptPath(name) {
+  // extraResources: python/ -> Resources/python/
   if (!app.isPackaged) {
     return path.join(__dirname, '..', 'python', name)
   }
-  // Windows: extraResources 在 resources/ 下
-  const base = process.resourcesPath
-  return path.join(base, 'python', name)
+  return path.join(process.resourcesPath, 'python', name)
 }
 
 // ─── 加载 dist/（生产）vs localhost:5173（开发）────────────────────────
