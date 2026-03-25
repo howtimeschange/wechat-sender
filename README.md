@@ -1,58 +1,72 @@
-# 微信发送助手 GUI
+# 微信发送助手 WeChat Sender
 
-> Electron + React 开箱即用版，支持 macOS + Windows
+跨平台 Electron 桌面工具，支持从 Excel 批量导入发送任务、手动创建任务、Daemon 守护模式、定时发送。
 
-## 功能
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- **上传 Excel** — 拖拽或点击上传，自动解析"发送任务"Sheet
-- **手动新建** — 弹出表单，字段与 Excel 完全一致
-- **复选框批量发送** — 支持全选/单选，实时日志
-- **守护进程** — 后台自动监控新任务并发送
-- **定时任务** — 指定时间自动触发
-- **微信设计规范** — 主色 #07C160 绿 + 灰底 #F5F5F5
+## 功能特性
 
-## 快速开始
+- **Excel 批量导入** — 下载标准模板，填写后一键导入任务列表
+- **手动创建任务** — 直接在应用内添加单个发送目标
+- **多选发送** — 勾选任务后批量发送，支持按目标+类型匹配
+- **Daemon 守护模式** — 后台常驻，自动检测定时任务并执行
+- **实时发送日志** — 每条任务的发送进度和结果实时显示
+- **任务状态同步** — 发送完成后自动更新任务列表状态
+- **微信原生自动化** — macOS AppleScript / Windows Uiautomation
+
+## 系统要求
+
+- macOS 10.15+ 或 Windows 10+
+- 已安装微信（用于自动化发送）
+
+## 安装包下载
+
+Releases 页面：https://github.com/howtimeschange/wechat-sender/releases
+
+## 开发
 
 ```bash
-cd gui
-
-# 1. 安装依赖
+# macOS
 npm install
+npm run dev           # 开发热重载模式
+npm run dist:mac      # 构建 macOS DMG 安装包
 
-# 2. 安装 Python（macOS）
-pip3 install openpyxl PyYAML
-
-# 3. 安装 Python（Windows）
-pip install openpyxl PyYAML
-
-# 4. 构建前端
-npm run build
-
-# 5. 启动（macOS）
-open dist/index.html
-# 或 Windows: start dist\index.html
-
-# 打包 macOS DMG
-npm run dist:mac
-
-# 打包 Windows NSIS
-npm run dist:win
+# Windows
+npm install
+npm run dist:win      # 构建 Windows NSIS 安装包
 ```
 
-## macOS 辅助功能权限
+## Excel 模板说明
 
-首次运行需授予辅助功能权限：
-系统设置 → 隐私与安全性 → 辅助功能 → 添加 Terminal（或本 App）
+| 字段 | 说明 |
+|------|------|
+| * 应用 | 微信 / 钉钉 / 飞书 |
+| * 联系人/群聊 | 精确的联系人昵称或群聊名称 |
+| * 消息类型 | 文字 / 图片 / 文字+图片 |
+| * 文字内容 | 支持变量：{name} {date} {time} |
+| 图片路径 | 本机绝对路径（消息类型含图片时必填） |
+| 发送时间 | 留空=立即发送；格式 YYYY-MM-DD HH:MM |
+| 重复 | 留空=单次；daily=每天；weekly=每周；workday=工作日 |
 
 ## 项目结构
 
 ```
-gui/
-├── electron/       # Electron 主进程 + IPC
-├── src/            # React 前端
-│   ├── pages/      # TasksPage / SettingsPage / TemplatePage
-│   └── components/ # NewTaskModal / SendLogDrawer / Sidebar
-├── python/         # Python CLI（被 Electron 调用）
-│   └── app/        # cli.py / parse_excel.py / template_gen.py
-└── dist/           # 构建产物
+wechat-sender-gui/
+├── electron/          # Electron 主进程
+│   ├── main.js         # IPC handlers、窗口管理
+│   └── preload.js      # 上下文桥接 API
+├── python/
+│   └── app/
+│       ├── cli.py      # 核心 CLI（发送逻辑、AppleScript）
+│       ├── parse_excel.py    # Excel 解析
+│       └── template_gen.py   # 模板生成
+├── src/
+│   ├── pages/          # React 页面
+│   └── components/      # UI 组件
+└── assets/             # 图标等资源
 ```
+
+## 许可证
+
+MIT
