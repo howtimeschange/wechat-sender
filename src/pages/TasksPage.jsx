@@ -135,10 +135,18 @@ export default function TasksPage() {
   // ── 新建任务 ──────────────────────────────────────────
   const handleNewTask = (task) => {
     if (editTask) {
-      setTasks(prev => prev.map(t => t.id === editTask.id ? { ...task, id: editTask.id } : t))
+      setTasks(prev => {
+        const updated = prev.map(t => t.id === editTask.id ? { ...task, id: editTask.id } : t)
+        window.api?.saveGuiTasks(updated)
+        return updated
+      })
       setEditTask(null)
     } else {
-      setTasks(prev => [...prev, { ...task, id: uid(), status: 'waiting' }])
+      setTasks(prev => {
+        const updated = [...prev, { ...task, id: uid(), status: 'waiting' }]
+        window.api?.saveGuiTasks(updated)
+        return updated
+      })
     }
     setShowNewTask(false)
   }
@@ -146,12 +154,20 @@ export default function TasksPage() {
   const deleteSelected = () => {
     if (!someSelected) return
     if (!confirm(`确认删除选中的 ${selected.size} 条任务？`)) return
-    setTasks(prev => prev.filter(t => !selected.has(t.id)))
+    setTasks(prev => {
+      const updated = prev.filter(t => !selected.has(t.id))
+      window.api?.saveGuiTasks(updated)
+      return updated
+    })
     setSelected(new Set())
   }
 
   const deleteTask = (id) => {
-    setTasks(prev => prev.filter(t => t.id !== id))
+    setTasks(prev => {
+      const updated = prev.filter(t => t.id !== id)
+      window.api?.saveGuiTasks(updated)
+      return updated
+    })
     setSelected(prev => { const s = new Set(prev); s.delete(id); return s })
   }
 
@@ -234,7 +250,11 @@ export default function TasksPage() {
   }
 
   const clearCompleted = () => {
-    setTasks(prev => prev.filter(t => t.status !== 'success'))
+    setTasks(prev => {
+      const updated = prev.filter(t => t.status !== 'success')
+      window.api?.saveGuiTasks(updated)
+      return updated
+    })
     setSelected(prev => {
       const kept = new Set(tasks.filter(t => t.status !== 'success').map(t => t.id))
       return new Set([...prev].filter(id => kept.has(id)))

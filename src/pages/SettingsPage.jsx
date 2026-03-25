@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import './SettingsPage.css'
 
-const REPEAT_LABELS = { '': '不重复', daily: '每天', weekly: '每周', workday: '每个工作日' }
-
 const DEFAULT_CFG = {
   send_interval: 5,
   max_per_minute: 8,
@@ -13,10 +11,6 @@ const DEFAULT_CFG = {
 export default function SettingsPage() {
   const [cfg, setCfg] = useState(DEFAULT_CFG)
   const [saved, setSaved] = useState(false)
-  const [schedules, setSchedules] = useState([]) // { id, time, repeat, enabled }
-  const [showAdd, setShowAdd] = useState(false)
-  const [newTime, setNewTime] = useState('')
-  const [newRepeat, setNewRepeat] = useState('')
   const [daemonOn, setDaemonOn] = useState(false)
   const logEndRef = useRef(null)
   const [daemonLogs, setDaemonLogs] = useState([])
@@ -63,28 +57,6 @@ export default function SettingsPage() {
       if (r.ok) { setDaemonOn(true); setDaemonLogs(prev => [...prev, { text: '▶ 守护进程启动中...', id: Date.now() }]) }
       else setDaemonLogs(prev => [...prev, { text: `❌ ${r.error}`, id: Date.now() }])
     }
-  }
-
-  // ── 定时任务 ──────────────────────────────
-  const addSchedule = () => {
-    if (!newTime) return
-    const s = { id: Date.now(), time: newTime, repeat: newRepeat, enabled: true }
-    setSchedules(prev => [...prev, s])
-    setNewTime(''); setNewRepeat(''); setShowAdd(false)
-
-    // 注册 cron 任务（如果支持）
-    if (window.api?.addSchedule) {
-      window.api.addSchedule(s)
-    }
-  }
-
-  const removeSchedule = (id) => {
-    setSchedules(prev => prev.filter(s => s.id !== id))
-    if (window.api?.removeSchedule) window.api.removeSchedule(id)
-  }
-
-  const toggleSchedule = (id) => {
-    setSchedules(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s))
   }
 
   return (
@@ -164,7 +136,9 @@ export default function SettingsPage() {
             <div>
               <div className="daemon-status-label">{daemonOn ? '运行中' : '已停止'}</div>
               <div className="daemon-status-sub">
-                {daemonOn ? `轮询间隔 ${cfg.poll_seconds}s` : '自动监控任务，到时立即发送'}
+                {daemonOn
+                  ? `每 ${cfg.poll_seconds}s 检查一次任务，到时立即发送`
+                  : '监控任务发送时间，到点自动执行'}
               </div>
             </div>
           </div>
@@ -183,53 +157,14 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* 定时任务 */}
+      {/* 说明 */}
       <div className="card settings-card">
-        <div className="settings-section-title-row">
-          <div className="settings-section-title" style={{ marginBottom: '0' }}>定时任务</div>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(v => !v)}>
-            {showAdd ? '取消' : '+ 添加定时'}
-          </button>
-        </div>
-        <p className="settings-note">在指定时间自动执行「发送选中任务」，适合定期推送场景。</p>
-
-        {showAdd && (
-          <div className="add-schedule-row">
-            <input type="datetime-local" className="input" value={newTime}
-              onChange={e => setNewTime(e.target.value)} />
-            <select className="input select" value={newRepeat}
-              onChange={e => setNewRepeat(e.target.value)} style={{ width: '130px' }}>
-              <option value="">单次</option>
-              <option value="daily">每天</option>
-              <option value="weekly">每周</option>
-              <option value="workday">每个工作日</option>
-            </select>
-            <button className="btn btn-primary btn-sm" onClick={addSchedule}>确认</button>
-          </div>
-        )}
-
-        {schedules.length === 0 && !showAdd && (
-          <div className="schedules-empty">暂无定时任务</div>
-        )}
-
-        {schedules.map(s => (
-          <div className="schedule-item" key={s.id}>
-            <label className="toggle">
-              <input type="checkbox" checked={s.enabled}
-                onChange={() => toggleSchedule(s.id)} />
-              <span className="toggle-slider" />
-            </label>
-            <div className="schedule-info">
-              <span className="schedule-time">{s.time}</span>
-              <span className="schedule-repeat">{REPEAT_LABELS[s.repeat] || s.repeat}</span>
-            </div>
-            <button className="icon-btn icon-btn-danger" onClick={() => removeSchedule(s.id)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-            </button>
-          </div>
-        ))}
+        <div className="settings-section-title">定时说明</div>
+        <p className="settings-note">
+          每个任务可设置「发送时间」，守护进程会在指定时间自动发送。<br/>
+          轮询间隔决定检查频率，建议 15–30 秒。<br/>
+          发送后任务状态变为「发送成功」，重复任务（repeat）会在下一周期重新生效。
+        </p>
       </div>
 
       {/* 保存 */}

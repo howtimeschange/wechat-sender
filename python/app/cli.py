@@ -464,73 +464,104 @@ def cmd_send(args):
     print(f"\n完成！成功 {success_count} 条，失败 {fail_count} 条")
 
 
+def _load_gui_tasks() -> list[dict]:
+    """从 gui_tasks.json 加载 GUI 任务列表（不依赖 openpyxl）。"""
+    f = CFG_PATH.parent / "gui_tasks.json"
+    if not f.exists():
+        return []
+    try:
+        with open(f, "r", encoding="utf-8") as fh:
+            return json.load(fh) or []
+    except Exception:
+        return []
+
+
+def _save_gui_tasks(tasks: list[dict]):
+    """保存任务列表到 gui_tasks.json。"""
+    f = CFG_PATH.parent / "gui_tasks.json"
+    CFG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(f, "w", encoding="utf-8") as fh:
+        json.dump(tasks, fh, ensure_ascii=False, indent=2)
+
+
 def cmd_daemon(args):
     if not IS_MAC and not IS_WINDOWS:
         print("❌ 当前系统不支持微信自动化")
         return
 
     cfg = get_cfg()
-    xlsx_path = Path(cfg.get("excel_path", "")).expanduser()
     poll_seconds = int(cfg.get("poll_seconds", 15))
     dry_run = cfg.get("dry_run", False)
     send_interval = cfg.get("send_interval", 5)
     max_per_minute = cfg.get("max_per_minute", 8)
-
-    if not xlsx_path.exists():
-        print(f"表格不存在: {xlsx_path}")
-        return
 
     print(f"守护进程模式启动 | 轮询间隔 {poll_seconds}s | dry_run={dry_run}")
     sent_times: list[datetime] = []
 
     while True:
         try:
-            wb = openpyxl.load_workbook(xlsx_path)
-            ws = wb[SHEET_TASKS]
-            cols = find_columns(ws)
-            tasks = read_tasks(ws, cols)
+            tasks = _load_gui_tasks()
             now = datetime.now()
             changed = False
 
-            for task in tasks:
-                if task.status.startswith(STATUS_SUCCESS) and not task.repeat:
+            for task_dict in tasks:
+                status = task_dict.get("status", "") or ""
+                # 跳过已成功的非重复任务
+                if status.startswith(STATUS_SUCCESS) and not task_dict.get("repeat"):
                     continue
-                try:
-                    validate_task(task)
-                except Exception as e:
-                    set_status(ws, cols, task.row, f"{STATUS_FAILED}: {e}")
-                    changed = True
-                    continue
-                if not should_send(task, now):
-                    if not task.status:
-                        set_status(ws, cols, task.row, STATUS_WAITING)
+
+                # 解析 send_time
+                send_time = None
+                raw_st = task_dict.get("send_time", "") or ""
+                if raw_st:
+                    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                        try:
+                            send_time = datetime.strptime(raw_st, fmt)
+                            break
+                        except ValueError:
+                            pass
+
+                # 判断是否到达发送时间
+                if send_time is not None and now < send_time:
+                    if not status:
+                        task_dict["status"] = STATUS_WAITING
                         changed = True
                     continue
 
+                # 频率控制
                 window_start = now - timedelta(minutes=1)
                 sent_times = [t for t in sent_times if t > window_start]
                 if len(sent_times) >= max_per_minute:
                     time.sleep(1)
                     continue
 
-                set_status(ws, cols, task.row, STATUS_RUNNING)
+                task_dict["status"] = STATUS_RUNNING
                 changed = True
 
                 try:
                     if not dry_run:
-                        call_sender(task.target, task.msg_type, task.text, task.image_path)
-                    status = f"{STATUS_SUCCESS} {now.strftime('%m-%d %H:%M')}"
-                    set_status(ws, cols, task.row, status)
+                        validate_task(Task(
+                            row=0, app=task_dict.get("app", "微信"), target=task_dict.get("target", ""),
+                            msg_type=task_dict.get("msg_type", "文字"), text=task_dict.get("text", ""),
+                            image_path=task_dict.get("image_path", ""),
+                            send_time=send_time, repeat=task_dict.get("repeat", ""), status=STATUS_RUNNING,
+                        ))
+                        call_sender(
+                            task_dict.get("target", ""),
+                            task_dict.get("msg_type", "文字"),
+                            task_dict.get("text", ""),
+                            task_dict.get("image_path", ""),
+                        )
+                    task_dict["status"] = f"{STATUS_SUCCESS} {now.strftime('%m-%d %H:%M')}"
                     sent_times.append(datetime.now())
-                    print(f"✅ → {task.target} [{task.msg_type}]", flush=True)
+                    print(f"✅ → {task_dict.get('target')} [{task_dict.get('msg_type')}]", flush=True)
                     time.sleep(send_interval)
                 except Exception as e:
-                    set_status(ws, cols, task.row, f"{STATUS_FAILED}: {e}")
-                    print(f"❌ → {task.target}: {e}", flush=True)
-                    changed = True
+                    task_dict["status"] = f"{STATUS_FAILED}: {e}"
+                    print(f"❌ → {task_dict.get('target')}: {e}", flush=True)
 
             if changed:
-                wb.save(xlsx_path)
+                _save_gui_tasks(tasks)
 
         except Exception as e:
             print(f"错误: {e}", flush=True)
