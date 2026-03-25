@@ -18,7 +18,6 @@ from typing import Optional
 
 try:
     import openpyxl
-    import yaml
     from rich.console import Console
     from rich.table import Table
     from rich.prompt import Confirm, Prompt
@@ -34,9 +33,11 @@ except ImportError:
 IS_MAC = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
 
-ROOT = Path(__file__).resolve().parents[1]
-CFG_PATH = ROOT / "config.yaml"
-APPLE_SCRIPT = ROOT / "scripts" / "wechat_send_mac.applescript"
+# 脚本自身所在目录（兼容 dev 和打包后路径）
+_SELF_DIR   = Path(__file__).resolve().parents[0]          # .../python/app/
+_SCRIPTS_DIR = _SELF_DIR.parent / "scripts"                  # .../python/scripts/
+CFG_PATH   = Path.home() / ".wechat-sender" / "config.json"
+APPLE_SCRIPT = _SCRIPTS_DIR / "wechat_send_mac.applescript"
 SHEET_TASKS = "发送任务"
 HEADER_ROW = 2
 
@@ -80,12 +81,13 @@ def load_cfg() -> dict:
     if not CFG_PATH.exists():
         return {}
     with open(CFG_PATH, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        return json.load(f) or {}
 
 
 def save_cfg(cfg: dict):
+    CFG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CFG_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False)
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
 def get_cfg():
@@ -171,9 +173,12 @@ def call_sender(target: str, msg_type: str, text: str, image_path: str):
         if r.returncode != 0:
             raise RuntimeError(r.stderr.strip() or "AppleScript 执行失败")
     elif IS_WINDOWS:
-        sys.path.insert(0, str(ROOT / "scripts"))
-        from wechat_send_win import call_send as win_call_send
-        win_call_send(target, msg_type, text, img)
+        import importlib.util
+        _win_script = _SCRIPTS_DIR / "wechat_send_win.py"
+        _spec = importlib.util.spec_from_file_location("wechat_send_win", str(_win_script))
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _mod.call_send(target, msg_type, text, img)
     else:
         raise RuntimeError("当前系统不支持微信自动化（仅支持 macOS 和 Windows）")
 
