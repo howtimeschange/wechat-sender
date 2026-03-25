@@ -3,6 +3,8 @@
 微信批量发送助手 — CLI 工具（macOS / Windows）
 GUI 增强版：支持 --json 输出
 """
+from __future__ import annotations
+
 # 确保用户 site-packages 在 import 路径最前面（打包后系统 Python 也能找到 openpyxl 等依赖）
 import sys as _sys
 try:
@@ -10,7 +12,6 @@ try:
     _site.addusersitepackages(_sys.path)
 except Exception:
     pass
-from __future__ import annotations
 
 import argparse
 import json
