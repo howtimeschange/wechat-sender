@@ -195,10 +195,9 @@ def activate_wechat():
 def search_contact(name: str, max_retries: int = 2):
     """搜索联系人（带重试）
 
-    关键：Ctrl+V 后必须立即按 Enter，不能有延迟。
-    WeChat 搜索框有 ~300ms 防抖逻辑 — 输入完成300ms内未确认会触发
-    "互联网搜索"跳转到网页，导致发送失败。
-    流程：激活窗口 → Ctrl+F → 清剪贴板 → 写搜索词 → 立即Enter"""
+    流程：Ctrl+F → 粘贴搜索词 → 等300ms防抖窗口 → ↓选本地联系人 → Enter
+    WeChat 搜索框有 ~300ms 防抖逻辑，粘贴后立即 Enter 会触发互联网搜索。
+    正确时序：粘贴 → 等待防抖 → ↓ → Enter"""
     for attempt in range(max_retries):
         activate_wechat()
         time.sleep(0.5)
@@ -207,9 +206,12 @@ def search_contact(name: str, max_retries: int = 2):
         # 清空剪贴板后立即写入搜索词（防止残留内容混入）
         _clipboard_clear()
         _clipboard_copy(name)
-        time.sleep(0.1)   # 等待剪贴板写入稳定
+        time.sleep(0.1)
         auto.SendKeys("{Ctrl}v")
-        auto.SendKeys("{Enter}")   # 立即按 Enter，不能有任何延迟
+        time.sleep(0.35)   # 等防抖窗口过去（WeChat debounce ≈ 300ms）
+        auto.SendKeys("{Down}")   # 跳过硬讯搜索条目，选第一项本地联系人
+        time.sleep(0.05)
+        auto.SendKeys("{Enter}")
         time.sleep(0.8)
         return
 
