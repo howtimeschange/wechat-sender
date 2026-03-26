@@ -5,8 +5,8 @@ import SendLogDrawer from '../components/SendLogDrawer'
 import './TasksPage.css'
 
 // ── 工具函数 ─────────────────────────────────────────────
-let _uid = 1
-const uid = () => String(_uid++)
+// 用时间戳+随机数生成唯一 id，避免 app 重启后计数器重置与持久化任务 id 重复
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 const STATUS_LABELS = {
   waiting: '待发送',

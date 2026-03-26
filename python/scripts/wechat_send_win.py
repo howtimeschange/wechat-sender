@@ -284,46 +284,70 @@ def attach_wechat(timeout: float = 20.0):
     if chosen is None:
         raise RuntimeError("无法找到微信主窗口")
 
-    app = Application(backend=BACKEND)
-    try:
-        app.connect(handle=chosen.handle, timeout=2)
-        _log("[INFO] 已通过句柄附着到微信")
-    except Exception:
+    # 先尝试 UIA backend，失败则降级 win32
+    for backend in (BACKEND, "win32"):
         try:
-            app.connect(title_re="微信|WeChat|Weixin", timeout=2)
-            _log("[INFO] 已通过标题附着到微信")
-        except Exception:
-            app.connect(path_re=r"Weixin\.exe|WeChat\.exe", timeout=2)
-            _log("[INFO] 已通过路径附着到微信")
+            app = Application(backend=backend)
+            try:
+                app.connect(handle=chosen.handle, timeout=3)
+            except Exception:
+                try:
+                    app.connect(title_re="微信|WeChat|Weixin", timeout=3)
+                except Exception:
+                    app.connect(path_re=r"Weixin\.exe|WeChat\.exe", timeout=3)
 
-    # 直接取 wrapper（不用 spec.top_window()），避免懒求值导致失效
-    wrapper = app.top_window().wrapper_object()
+            # wrapper_object() 可能返回 None（UIA 节点不可用时）
+            spec = app.top_window()
+            wrapper = None
+            try:
+                wrapper = spec.wrapper_object()
+            except Exception:
+                pass
 
-    # 验证确实是微信
-    try:
-        name = (wrapper.element_info.name or "").lower()
-        if not ("微信" in name or "wechat" in name or "weixin" in name):
-            wrapper = app.window(title_re="微信|WeChat|Weixin").wrapper_object()
-    except Exception:
-        pass
+            if wrapper is None:
+                # 尝试通过标题直接定位
+                try:
+                    wrapper = app.window(title_re="微信|WeChat|Weixin").wrapper_object()
+                except Exception:
+                    pass
 
-    try:
-        if getattr(wrapper, "is_minimized", None) and wrapper.is_minimized():
-            _log("[INFO] 还原最小化的微信窗口")
-            wrapper.restore()
-    except Exception:
-        pass
+            if wrapper is None:
+                _log(f"[WARN] backend={backend} wrapper_object() 返回 None，尝试下一个")
+                continue
 
-    _log("[INFO] 聚焦微信窗口")
-    try:
-        wrapper.set_focus()
-        if hasattr(wrapper, "set_keyboard_focus"):
-            wrapper.set_keyboard_focus()
-    except Exception:
-        pass
+            # 验证确实是微信
+            try:
+                name = (wrapper.element_info.name or "").lower()
+                if not ("微信" in name or "wechat" in name or "weixin" in name):
+                    alt = app.window(title_re="微信|WeChat|Weixin").wrapper_object()
+                    if alt is not None:
+                        wrapper = alt
+            except Exception:
+                pass
 
-    time.sleep(_OS_TIMING["focus_delay"])
-    return app, wrapper
+            # 还原最小化
+            try:
+                if getattr(wrapper, "is_minimized", None) and wrapper.is_minimized():
+                    _log("[INFO] 还原最小化的微信窗口")
+                    wrapper.restore()
+            except Exception:
+                pass
+
+            # 聚焦
+            _log(f"[INFO] 聚焦微信窗口（backend={backend}）")
+            try:
+                wrapper.set_focus()
+            except Exception:
+                pass
+
+            time.sleep(_OS_TIMING["focus_delay"])
+            return app, wrapper
+
+        except Exception as e:
+            _log(f"[WARN] backend={backend} 附着失败: {e}")
+            continue
+
+    raise RuntimeError("所有 backend 均无法附着微信窗口，请确认微信已登录并在前台运行")
 
 
 # ─── 搜索 & 发送 ────────────────────────────────────────
@@ -346,19 +370,32 @@ def _focus_search_edit(main_win):
     return False
 
 
+def _get_win_rect(win):
+    """兼容 UIA/win32 两种 backend 获取窗口矩形。"""
+    try:
+        # win32 backend: wrapper 有 .rectangle() 方法
+        r = win.rectangle()
+        return r
+    except Exception:
+        pass
+    try:
+        # UIA backend: element_info.rectangle 属性
+        return win.element_info.rectangle
+    except Exception:
+        return None
+
+
 def _click_search_area(main_win):
     """点击微信左侧搜索框区域（坐标法，Win10/Win11 通用）。
-    微信搜索框固定在窗口左上角，约 (窗口左+180, 窗口上+50) 位置。
     先尝试 UIA 控件聚焦，失败则降级到坐标点击。
     """
-    # 优先：UIA 控件聚焦
     if _focus_search_edit(main_win):
         return True
 
-    # 降级：坐标点击（Win10 自绘控件无 UIA 节点时）
     try:
-        rect = main_win.element_info.rectangle
-        # 搜索框在左侧面板顶部，x=左边缘+175（跳过导航栏），y=顶部+48
+        rect = _get_win_rect(main_win)
+        if rect is None:
+            return False
         cx = rect.left + 175
         cy = rect.top + 48
         _log(f"[INFO] 坐标点击搜索框区域 ({cx}, {cy})")
@@ -375,51 +412,48 @@ def focus_search_and_open_chat(main_win, friend_name: str):
     OS 感知版：Win10/Win11 使用不同延迟参数。
     """
     t = _OS_TIMING
-    main_win.set_focus()
+    try:
+        main_win.set_focus()
+    except Exception:
+        pass
     time.sleep(t["focus_delay"])
 
     # ── 退出当前聊天状态，回到主界面 ──
-    # ESC 在 Win10 有时无效，改用点击左侧会话列表区域（比 ESC 可靠）
     try:
-        rect = main_win.element_info.rectangle
-        # 点击左侧会话列表区（x=窗口左+80，y=窗口高1/3处）
-        lx = rect.left + 80
-        ly = rect.top + int((rect.bottom - rect.top) / 3)
-        _log(f"[INFO] 点击会话列表区退出聊天 ({lx}, {ly})")
-        mouse.click(button="left", coords=(lx, ly))
-        time.sleep(t["esc_delay"])
+        rect = _get_win_rect(main_win)
+        if rect is not None:
+            lx = rect.left + 80
+            ly = rect.top + int((rect.bottom - rect.top) / 3)
+            _log(f"[INFO] 点击会话列表区退出聊天 ({lx}, {ly})")
+            mouse.click(button="left", coords=(lx, ly))
+            time.sleep(t["esc_delay"])
+        else:
+            raise ValueError("无法获取窗口矩形")
     except Exception:
-        # 兜底仍用 ESC
         keyboard.send_keys("{ESC}")
         time.sleep(t["esc_delay"])
         keyboard.send_keys("{ESC}")
         time.sleep(t["esc_delay"])
 
-    # ── 聚焦搜索框：坐标点击 + 快捷键双保险 ──
-    _log("[INFO] 聚焦搜索框（坐标点击）")
+    # ── 聚焦搜索框 ──
     _click_search_area(main_win)
     time.sleep(t["search_key_delay"])
 
-    # 尝试快捷键兜底（Win11 上更可靠）
     if not _focus_search_edit(main_win):
         keyboard.send_keys("^f")
         time.sleep(t["search_key_delay"])
 
-    # 清空搜索框
     keyboard.send_keys("^a{BACKSPACE}")
     time.sleep(0.15)
 
-    # ── 输入搜索词 ──
     _log(f"[INFO] 输入搜索词：{friend_name}")
     keyboard.send_keys(friend_name, with_spaces=True)
 
-    # ── 等待搜索结果稳定 ──
     _wait_for_search_result(main_win, friend_name, timeout=t["search_result_timeout"])
 
     _log("[INFO] 回车打开聊天")
     keyboard.send_keys("{ENTER}")
 
-    # ── 等待聊天窗口就绪 ──
     _wait_for_chat_ready(main_win, timeout=t["chat_ready_timeout"])
 
 
@@ -513,8 +547,8 @@ def _focus_message_input(main_win):
         ctrls = []
 
     try:
-        rect_win = main_win.element_info.rectangle
-        bottom_win = rect_win.bottom
+        rect_win = _get_win_rect(main_win)
+        bottom_win = rect_win.bottom if rect_win else 99999
     except Exception:
         bottom_win = 99999
 
@@ -559,7 +593,9 @@ def _focus_message_input(main_win):
 def _click_bottom_chat_area(main_win, clicks: int = 3):
     """点击聊天窗口底部区域以获取焦点"""
     try:
-        rect = main_win.element_info.rectangle
+        rect = _get_win_rect(main_win)
+        if rect is None:
+            return
         cx = int((rect.left + rect.right) / 2)
         for i in range(clicks):
             y = int(rect.bottom - 80 - i * 40)
