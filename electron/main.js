@@ -39,7 +39,7 @@ function ensurePythonDeps() {
   console.log('[openpyxl] not found, attempting install via pip...')
   // 优先用 pip install --user（不会破坏系统 Python 环境）
   const installCmd =
-    `${pythonPath} -m pip install --user openpyxl PyYAML rich 2>&1`
+    `${pythonPath} -m pip install --user openpyxl PyYAML rich uiautomation pywin32 Pillow 2>&1`
   try {
     const out = require('child_process').execSync(installCmd, { timeout: 120 * 1000 })
     console.log('[openpyxl] install output:', out.toString())
@@ -48,7 +48,7 @@ function ensurePythonDeps() {
     // 最后的 fallback：尝试系统 pip 直接安装到用户目录
     try {
       const fallback = require('child_process').execSync(
-        `python3 -m pip install --user openpyxl PyYAML rich 2>&1`,
+        `python3 -m pip install --user openpyxl PyYAML rich uiautomation pywin32 Pillow 2>&1`,
         { timeout: 120 * 1000 }
       )
       console.log('[openpyxl] fallback install output:', fallback.toString())

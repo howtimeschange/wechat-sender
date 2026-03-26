@@ -82,7 +82,7 @@ jobs:
           Write-Host "Python:"
           Get-ChildItem "$dest" -Name
           Write-Host "Installing dependencies..."
-          & "$dest\python.exe" -m pip install openpyxl pywinauto psutil pyperclip pywin32 Pillow --quiet --no-warn-script-location
+          & "$dest\python.exe" -m pip install openpyxl PyYAML rich uiautomation pywin32 Pillow --quiet --no-warn-script-location
           Write-Host "Done. Python version:"
           & "$dest\python.exe" --version
 
