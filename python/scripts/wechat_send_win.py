@@ -301,12 +301,12 @@ def _focus_search_edit(main_win):
     return False
 
 
-def focus_search_and_open_chat(main_win, friend_name: str, delay: float = 0.25):
-    """聚焦全局搜索框，输入好友名，回车打开聊天"""
+def focus_search_and_open_chat(main_win, friend_name: str, delay: float = 0.35):
+    """聚焦全局搜索框，输入好友名，回车打开聊天（Win10 自适应等待版）"""
     main_win.set_focus()
-    time.sleep(0.2)
+    time.sleep(0.3)
 
-    # 尝试快捷键
+    # 尝试快捷键聚焦搜索框
     for combo in ("^f", "^k"):
         _log(f"[INFO] 发送 {combo} 聚焦搜索框")
         keyboard.send_keys(combo)
@@ -322,16 +322,82 @@ def focus_search_and_open_chat(main_win, friend_name: str, delay: float = 0.25):
 
     # 清空搜索框
     keyboard.send_keys("^a{BACKSPACE}")
-    time.sleep(0.1)
+    time.sleep(0.15)
 
-    # 用 pywinauto 直接打字（不走剪贴板！SendMessage WM_SETTEXT，不触发 WeChat 监控）
+    # 输入搜索词（SendMessage WM_SETTEXT，不走剪贴板）
     _log(f"[INFO] 输入搜索词：{friend_name}")
     keyboard.send_keys(friend_name, with_spaces=True)
-    time.sleep(delay)
+
+    # 自适应等待搜索结果出现（Win10 老机型响应慢，最多等 3 秒）
+    _wait_for_search_result(main_win, friend_name, timeout=3.0)
 
     _log("[INFO] 回车打开聊天")
     keyboard.send_keys("{ENTER}")
-    time.sleep(delay)
+
+    # 等待聊天窗口切换完成（自适应，Win10 最多等 2.5 秒）
+    _wait_for_chat_ready(main_win, timeout=2.5)
+
+
+def _wait_for_search_result(main_win, friend_name: str, timeout: float = 3.0):
+    """自适应等待搜索结果出现。
+    策略：轮询 ListItem / DataItem 类控件，出现且数量稳定后认为列表加载完毕。
+    兜底：超时后用固定 0.5s 延迟。
+    """
+    _log(f"[INFO] 等待搜索结果（最多 {timeout}s）")
+    deadline = time.time() + timeout
+    prev_count = -1
+    stable_ticks = 0
+
+    while time.time() < deadline:
+        try:
+            # 检查搜索结果列表（ListItem / DataItem 通常是搜索结果条目）
+            items = main_win.descendants(control_type="ListItem")
+            if not items:
+                items = main_win.descendants(control_type="DataItem")
+            count = len(items)
+            if count > 0:
+                if count == prev_count:
+                    stable_ticks += 1
+                    if stable_ticks >= 2:   # 连续 2 次（≈160ms）结果稳定
+                        _log(f"[INFO] 搜索结果稳定，共 {count} 项")
+                        time.sleep(0.1)
+                        return
+                else:
+                    stable_ticks = 0
+                prev_count = count
+        except Exception:
+            pass
+        time.sleep(0.08)
+
+    _log("[WARN] 搜索结果等待超时，用固定延迟兜底")
+    time.sleep(0.5)
+
+
+def _wait_for_chat_ready(main_win, timeout: float = 2.5):
+    """自适应等待聊天窗口就绪（输入框可用），超时则用固定等待兜底"""
+    _log(f"[INFO] 等待聊天窗口就绪（最多 {timeout}s）")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            ctrls = main_win.descendants()
+            for c in ctrls:
+                try:
+                    ei = c.element_info
+                    ct = getattr(ei, "control_type", "") or ""
+                    cn = getattr(ei, "class_name", "") or ""
+                    if ct in ("Edit", "Document") or "RichEdit" in cn:
+                        rect = getattr(ei, "rectangle", None)
+                        if rect and _window_area(rect) > 10000:
+                            _log("[INFO] 聊天输入框已就绪")
+                            time.sleep(0.15)
+                            return
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        time.sleep(0.1)
+    _log("[WARN] 等待超时，使用固定延迟兜底")
+    time.sleep(0.5)
 
 
 def _focus_message_input(main_win):
@@ -400,33 +466,36 @@ def _click_bottom_chat_area(main_win, clicks: int = 3):
 
 
 def send_message_to_current_chat(main_win, message: str,
-                                 delay: float = 0.12,
+                                 delay: float = 0.15,
                                  press_enter_to_send: bool = True,
                                  use_paste: bool = False):
     """
     向当前聊天窗口输入消息并发送。
     use_paste=True 时用 Ctrl+V（走剪贴板），False 时直接打字。
     推荐 False：pywinauto keyboard.send_keys 直接写文本到控件，完全不碰剪贴板。
+    Win10 兼容版：聚焦输入框最多重试 5 次，带自适应等待。
     """
-    # 聚焦输入框
-    for attempt in range(3):
+    # 聚焦输入框（最多重试 5 次，兼容 Win10 慢机型）
+    focused = False
+    for attempt in range(5):
         if _focus_message_input(main_win):
+            focused = True
             break
         _click_bottom_chat_area(main_win, clicks=2)
-        time.sleep(0.1)
-        if _focus_message_input(main_win):
-            break
+        time.sleep(0.15 + attempt * 0.1)  # 逐步加大等待
+    if not focused:
+        _log("[WARN] 未能聚焦输入框，继续尝试发送")
 
-    time.sleep(0.05)
-    keyboard.send_keys("{END}")   # 确保光标在末尾
     time.sleep(0.08)
+    keyboard.send_keys("{END}")   # 确保光标在末尾
+    time.sleep(0.1)
 
     # 输入消息：优先直接打字（不走剪贴板，无防抖问题）
     _log(f"[INFO] 输入消息：{message[:20]}{'...' if len(message) > 20 else ''}")
     if use_paste:
-        # 备选：剪贴板粘贴（图片必须走剪贴板，长文本粘贴也更快）
+        # 备选：剪贴板粘贴
         _clipboard_copy(message)
-        time.sleep(0.05)
+        time.sleep(0.08)
         keyboard.send_keys("^v")
     else:
         keyboard.send_keys(message, with_spaces=True)
@@ -442,21 +511,18 @@ def send_message_to_current_chat(main_win, message: str,
 
 
 def search_contact(name: str, max_retries: int = 2):
-    """搜索并打开与指定联系人的聊天窗口"""
+    """搜索并打开与指定联系人的聊天窗口（仅供独立测试使用；批量发送请用 call_send）"""
     app, main_win = attach_wechat()
-
     for attempt in range(max_retries):
         _log(f"[INFO] search_contact attempt {attempt + 1}: {name}")
         focus_search_and_open_chat(main_win, name)
-        time.sleep(0.8)
         return
-
     raise RuntimeError(f"未找到联系人 [{name}]，请手动确认微信窗口状态")
 
 
-def send_text(text: str):
+def send_text(text: str, main_win=None):
     """发送文字消息（直接打字，不走剪贴板）"""
-    send_message_to_current_chat(None, text, delay=0.12,
+    send_message_to_current_chat(main_win, text, delay=0.12,
                                  press_enter_to_send=True, use_paste=False)
 
 
@@ -494,13 +560,20 @@ def send_text_with_image(text: str, image_path: str):
 
 def call_send(target: str, msg_type: str, text: str, image_path: str):
     """统一发送入口（由 cli.py 调用）"""
-    search_contact(target)
+    # attach_wechat 一次性附着，把 main_win 传给后续函数，避免每步重新附着
+    app, main_win = attach_wechat()
+    focus_search_and_open_chat(main_win, target)
     if msg_type == "文字":
-        send_text(text)
+        send_message_to_current_chat(main_win, text, delay=0.15,
+                                     press_enter_to_send=True, use_paste=False)
     elif msg_type == "图片":
         send_image(image_path)
     elif msg_type == "文字+图片":
-        send_text_with_image(text, image_path)
+        _clipboard_copy(text)
+        time.sleep(0.08)
+        keyboard.send_keys("^v")
+        time.sleep(0.2)
+        send_image(image_path)
     else:
         raise ValueError(f"不支持的消息类型: {msg_type}")
 

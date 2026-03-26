@@ -226,25 +226,26 @@ ipcMain.handle('send-selected', async (event, taskData) => {
   console.log('[send-selected] script:', scriptPath)
   console.log('[send-selected] tasks:', jsonArg.slice(0, 80))
 
-  const { execFileSync } = require('child_process')
-  try {
-    const stdout = execFileSync(pythonBin, [scriptPath, 'send', '--tasks-json', jsonArg], {
-      encoding: 'utf8',
-      timeout: 0,
-      env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' }),
-      windowsHide: true,
-    })
-    console.log('[send-selected] stdout length:', stdout.length)
-    // 发送所有输出到日志
-    win.webContents.send('send-progress', stdout)
-    // 逐行解析任务结果
-    stdout.split('\n').forEach(function(line) {
+  // ✅ 改为 spawn 异步方式，避免 execFileSync 同步阻塞主进程导致"未响应"
+  const proc = spawn(pythonBin, [scriptPath, 'send', '--tasks-json', jsonArg], {
+    env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' }),
+    windowsHide: true,
+  })
+
+  let stdoutBuf = ''
+
+  proc.stdout.on('data', function(d) {
+    const text = d.toString('utf8')
+    stdoutBuf += text
+    if (!win.isDestroyed()) win.webContents.send('send-progress', text)
+    // 实时逐行解析任务状态
+    text.split('\n').forEach(function(line) {
       if (!line.trim()) return
       const hasSuccess = line.includes('✅')
       const hasFailed = line.includes('❌')
       if (hasSuccess || hasFailed) {
         const taskMatch = line.match(/^\[(\d+)\/(\d+)\] → (.+?) \[(.+?)\]/)
-        if (taskMatch) {
+        if (taskMatch && !win.isDestroyed()) {
           win.webContents.send('task-status-update', {
             target: taskMatch[3].trim(),
             msg_type: taskMatch[4].trim(),
@@ -253,17 +254,27 @@ ipcMain.handle('send-selected', async (event, taskData) => {
         }
       }
     })
-    win.webContents.send('send-done', { code: 0 })
-  } catch(e) {
-    console.error('[send-selected] exception:', e.message)
-    // execFileSync throws with message like "Command failed: python3 ... exited with 1"
-    // Extract real exit code from message (format: "... exited with N")
-    const msg = e.message || String(e)
-    const exitMatch = msg.match(/exited with (\d+)/)
-    const code = exitMatch ? parseInt(exitMatch[1], 10) : 1
-    win.webContents.send('send-progress', '[ERROR] ' + msg)
-    win.webContents.send('send-done', { code, error: msg })
-  }
+  })
+
+  proc.stderr.on('data', function(d) {
+    const text = d.toString('utf8')
+    console.error('[send-selected] stderr:', text)
+    if (!win.isDestroyed()) win.webContents.send('send-progress', '[ERROR] ' + text)
+  })
+
+  proc.on('close', function(code) {
+    console.log('[send-selected] process exited with code', code)
+    if (!win.isDestroyed()) win.webContents.send('send-done', { code: code || 0 })
+  })
+
+  proc.on('error', function(err) {
+    console.error('[send-selected] process error:', err.message)
+    if (!win.isDestroyed()) {
+      win.webContents.send('send-progress', '[ERROR] ' + err.message)
+      win.webContents.send('send-done', { code: 1, error: err.message })
+    }
+  })
+
   return { ok: true }
 })
 
