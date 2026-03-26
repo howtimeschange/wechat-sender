@@ -275,7 +275,10 @@ def ensure_wechat_running(start_if_needed: bool = True, timeout: float = 20.0):
 
 
 def attach_wechat(timeout: float = 20.0):
-    """附着到微信窗口，返回 (app, main_window)"""
+    """附着到微信窗口，返回 (app, main_window_wrapper)。
+    返回的 main_win 是真正的 wrapper 对象（不是懒加载 spec），
+    避免跨调用时 element_info 失效导致 '__dict__' 错误。
+    """
     ensure_wechat_running(start_if_needed=True, timeout=timeout)
     chosen = _find_wechat_window()
     if chosen is None:
@@ -293,14 +296,17 @@ def attach_wechat(timeout: float = 20.0):
             app.connect(path_re=r"Weixin\.exe|WeChat\.exe", timeout=2)
             _log("[INFO] 已通过路径附着到微信")
 
-    main_win = app.top_window()
+    # 直接取 wrapper（不用 spec.top_window()），避免懒求值导致失效
+    wrapper = app.top_window().wrapper_object()
 
     # 验证确实是微信
-    name = (main_win.element_info.name or "").lower()
-    if not ("微信" in name or "wechat" in name or "weixin" in name):
-        main_win = app.window(title_re="微信|WeChat|Weixin")
+    try:
+        name = (wrapper.element_info.name or "").lower()
+        if not ("微信" in name or "wechat" in name or "weixin" in name):
+            wrapper = app.window(title_re="微信|WeChat|Weixin").wrapper_object()
+    except Exception:
+        pass
 
-    wrapper = main_win.wrapper_object()
     try:
         if getattr(wrapper, "is_minimized", None) and wrapper.is_minimized():
             _log("[INFO] 还原最小化的微信窗口")
@@ -316,8 +322,8 @@ def attach_wechat(timeout: float = 20.0):
     except Exception:
         pass
 
-    time.sleep(0.3)
-    return app, main_win
+    time.sleep(_OS_TIMING["focus_delay"])
+    return app, wrapper
 
 
 # ─── 搜索 & 发送 ────────────────────────────────────────
@@ -660,7 +666,7 @@ def send_text_with_image(text: str, image_path: str):
 
 def call_send(target: str, msg_type: str, text: str, image_path: str):
     """统一发送入口（由 cli.py 调用）。
-    进程内批量调用时复用同一个 app/main_win，不重新附着微信。
+    进程内批量调用时复用同一个 app/main_win wrapper，不重新附着微信。
     """
     global _cached_app, _cached_main_win
 
@@ -668,9 +674,11 @@ def call_send(target: str, msg_type: str, text: str, image_path: str):
     if _cached_main_win is None:
         _cached_app, _cached_main_win = attach_wechat()
     else:
-        # 验证窗口仍然有效，无效则重新附着
+        # 验证 wrapper 仍然有效（通过 handle 判断，不触发 element_info 懒求值）
         try:
-            _ = _cached_main_win.element_info.name
+            handle = _cached_main_win.handle
+            if not handle:
+                raise ValueError("handle 无效")
         except Exception:
             _log("[INFO] 缓存窗口已失效，重新附着微信")
             _cached_app, _cached_main_win = attach_wechat()

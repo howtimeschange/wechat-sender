@@ -130,7 +130,7 @@ export default function TasksPage() {
   // ── 选择逻辑 ──────────────────────────────────────────
   const sendableTasks = tasks.filter(t => t.status === 'waiting' || t.status === 'failed' || t.status === 'stopped')
   const allSelected = sendableTasks.length > 0 && sendableTasks.every(t => selected.has(t.id))
-  const someSelected = selected.size > 0
+  const someSelected = sendableTasks.some(t => selected.has(t.id))
 
   const toggleAll = () => {
     if (allSelected) {
